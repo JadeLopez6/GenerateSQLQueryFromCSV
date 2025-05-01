@@ -4,8 +4,11 @@ class Program
 {
     static void Main(string[] args)
     {
-        var csvFilePath = @"C:\Users\Jade.Lopez\OneDrive - WiseTech Global Pty Ltd\Desktop\Work Items\International Logistics Core\WI00876146 - ABEREF EK (176) - add new Productsdelete old ones\250422_UA_commodity_codes_TC_added.csv";
-        var sqlFilePath = @"C:\Users\Jade.Lopez\OneDrive - WiseTech Global Pty Ltd\Desktop\Work Items\International Logistics Core\WI00876146 - ABEREF EK (176) - add new Productsdelete old ones\250422_UA_commodity_codes_TC_added.sql";
+        // Change to the path of your CSV
+        var csvFilePath = @"C:\Users\Jade.Lopez\OneDrive - WiseTech Global Pty Ltd\Desktop\Work Items\International Logistics Core\WI00876146 - ABEREF EK (176) - add new Productsdelete old ones\Add AER_AERO_250501_update.csv";
+
+        // Change to the desired path for your SQL file
+        var sqlFilePath = @"C:\Users\Jade.Lopez\OneDrive - WiseTech Global Pty Ltd\Desktop\Work Items\International Logistics Core\WI00876146 - ABEREF EK (176) - add new Productsdelete old ones\Add AER_AERO_250501_update1.sql";
 
         var tables = new List<(string tableName, string columnNames)>
         {
@@ -20,6 +23,7 @@ class Program
     static void GenerateSQLFromCSV(string csvFilePath, string sqlFilePath, List<(string tableName, string columnNames)> tables)
     {
         var queries = new List<string>();
+        var airlineID = "157"; // Change to your AirlineID
 
         // DELETE
         queries.Add("DECLARE @success bit = 1");
@@ -27,10 +31,10 @@ class Program
 BEGIN TRANSACTION
 BEGIN TRY");
         queries.Add("use RefDbRepoSafe");
-        queries.Add(@"
+        queries.Add(@$"
 -- Delete Product, Commodity & Pivot Codes.
 
-DELETE RefAirlineProductCodeCommodityCodePivot WHERE RPC_AirlineID = '016';");
+DELETE RefAirlineProductCodeCommodityCodePivot WHERE RPC_AirlineID = '{airlineID}';");
 
         var commodityCodeList = new List<string>();
         var productCodeList = new List<string>();
@@ -62,10 +66,10 @@ DELETE RefAirlineProductCodeCommodityCodePivot WHERE RPC_AirlineID = '016';");
 
         queries.Add($@"
 UPDATE RefDbVersionControl SET RVC_Deleted = 1, RVC_IsPublished = 0
-    WHERE RVC_ParentPK IN (SELECT RAC_PK FROM RefAirlineCommodityCode WHERE RAC_AirlineID = '016' AND RAC_Code NOT IN ({commodityCodes})) 
+    WHERE RVC_ParentPK IN (SELECT RAC_PK FROM RefAirlineCommodityCode WHERE RAC_AirlineID = '{airlineID}' AND RAC_Code NOT IN ({commodityCodes})) 
 
 UPDATE RefDbVersionControl SET RVC_Deleted = 1, RVC_IsPublished = 0
-    WHERE RVC_ParentPK IN (SELECT RAR_PK FROM RefAirlineProductCode WHERE RAR_AirlineID = '016' AND RAR_Code NOT IN ({productCodes})) 
+    WHERE RVC_ParentPK IN (SELECT RAR_PK FROM RefAirlineProductCode WHERE RAR_AirlineID = '{airlineID}' AND RAR_Code NOT IN ({productCodes})) 
 ");
 
         // INSERT/UPDATE
@@ -93,7 +97,7 @@ DECLARE @commodityPK UNIQUEIDENTIFIER;
                 while (!reader.EndOfData)
                 {
                     var recordSplit = reader.ReadFields();
-                    var singularQuery = CreateInsertOrUpdateQuery(tableName, columnNames, recordSplit);
+                    var singularQuery = CreateInsertOrUpdateQuery(tableName, columnNames, recordSplit, airlineID);
                     if (!queries.Contains(singularQuery))
                     {
                         queries.Add(singularQuery);
@@ -119,39 +123,53 @@ END
         Console.WriteLine($"The SQL query has been written to {sqlFilePath}");
     }
 
-    static string CreateInsertOrUpdateQuery(string tableName, string columnNames, string[] values)
+    static string CreateInsertOrUpdateQuery(string tableName, string columnNames, string[] values, string airlineID)
     {
         return tableName switch
         {
-            "dbo.RefAirlineProductCode" => GenerateProductCodeQuery(tableName, columnNames, values),
-            "dbo.RefAirlineCommodityCode" => GenerateCommodityCodeQuery(tableName, columnNames, values),
-            "dbo.RefAirlineProductCodeCommodityCodePivot" => GeneratePivotCodeQuery(tableName, columnNames, values),
+            "dbo.RefAirlineProductCode" => GenerateProductCodeQuery(tableName, columnNames, values, airlineID),
+            "dbo.RefAirlineCommodityCode" => GenerateCommodityCodeQuery(tableName, columnNames, values, airlineID),
+            "dbo.RefAirlineProductCodeCommodityCodePivot" => GeneratePivotCodeQuery(tableName, columnNames, values, airlineID),
             _ => string.Empty
         };
     }
 
-    static string GenerateProductCodeQuery(string tableName, string columnNames, string[] values) =>
+    static string GenerateProductCodeQuery(string tableName, string columnNames, string[] values, string airlineID) =>
 @$"
-IF EXISTS (SELECT 1 FROM {tableName} WHERE RAR_Code = '{values[1]}' AND RAR_AirlineID = '016')
-    UPDATE {tableName} SET RAR_Description = '{values[2]}' WHERE RAR_Code = '{values[1]}' AND RAR_AirlineID = '016'; 
+IF EXISTS (SELECT 1 FROM {tableName} WHERE RAR_Code = '{values[1]}' AND RAR_AirlineID = '{airlineID}')
+    UPDATE {tableName} SET RAR_Description = '{values[2]}' WHERE RAR_Code = '{values[1]}' AND RAR_AirlineID = '{airlineID}'; 
 ELSE
     INSERT INTO {tableName} ({columnNames}) VALUES (NEWID(), '{values[0]}', '{values[1]}', '{values[2]}');
 ";
 
-    static string GenerateCommodityCodeQuery(string tableName, string columnNames, string[] values) =>
-@$"
-IF EXISTS (SELECT 1 FROM {tableName} WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '016')
-    UPDATE {tableName} SET RAC_Description = '{values[4]}' WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '016'; 
+    static string GenerateCommodityCodeQuery(string tableName, string columnNames, string[] values, string airlineID)
+    {
+        if (values.Length.Equals(6)) // csv with special handling codes
+        {
+            return @$"
+IF EXISTS (SELECT 1 FROM {tableName} WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '{airlineID}')
+    UPDATE {tableName} SET RAC_Description = '{values[4]}', RAC_SpecialHandlingCodes = '{values[5]}' WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '{airlineID}'; 
+ELSE
+    INSERT INTO {tableName} ({columnNames}, RAC_SpecialHandlingCodes) VALUES (NEWID(), '{values[0]}', '{values[3]}', '{values[4]}', '{values[5]}');
+";
+        }
+        else // csv without special handling codes
+        {
+            return @$"
+IF EXISTS (SELECT 1 FROM {tableName} WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '{airlineID}')
+    UPDATE {tableName} SET RAC_Description = '{values[4]}' WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '{airlineID}'; 
 ELSE
     INSERT INTO {tableName} ({columnNames}) VALUES (NEWID(), '{values[0]}', '{values[3]}', '{values[4]}');
 ";
+        }
+    }
 
-    static string GeneratePivotCodeQuery(string tableName, string columnNames, string[] values) =>
+    static string GeneratePivotCodeQuery(string tableName, string columnNames, string[] values, string airlineID) =>
 $@"
-SELECT @productPK = RAR_PK FROM dbo.RefAirlineProductCode WHERE RAR_Code = '{values[1]}' AND RAR_AirlineID = '016';
-SELECT @commodityPK = RAC_PK FROM dbo.RefAirlineCommodityCode WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '016';
+SELECT @productPK = RAR_PK FROM dbo.RefAirlineProductCode WHERE RAR_Code = '{values[1]}' AND RAR_AirlineID = '{airlineID}';
+SELECT @commodityPK = RAC_PK FROM dbo.RefAirlineCommodityCode WHERE RAC_Code = '{values[3]}' AND RAC_AirlineID = '{airlineID}';
                     
-IF NOT EXISTS (SELECT 1 FROM {tableName} WHERE RPC_RAR = @productPK AND RPC_RAC = @commodityPK AND RPC_AirlineID = '016')
+IF NOT EXISTS (SELECT 1 FROM {tableName} WHERE RPC_RAR = @productPK AND RPC_RAC = @commodityPK AND RPC_AirlineID = '{airlineID}')
     INSERT INTO {tableName} ({columnNames}) VALUES (NEWID(), '{values[0]}', @productPK, @commodityPK);
 ";
 
