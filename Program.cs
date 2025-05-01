@@ -5,10 +5,10 @@ class Program
     static void Main(string[] args)
     {
         // Change to the path of your CSV
-        var csvFilePath = @"C:\Users\Jade.Lopez\OneDrive - WiseTech Global Pty Ltd\Desktop\Work Items\International Logistics Core\WI00876146 - ABEREF EK (176) - add new Productsdelete old ones\Add AER_AERO_250501_update.csv";
+        var csvFilePath = @"C:\FilePath\file.csv";
 
         // Change to the desired path for your SQL file
-        var sqlFilePath = @"C:\Users\Jade.Lopez\OneDrive - WiseTech Global Pty Ltd\Desktop\Work Items\International Logistics Core\WI00876146 - ABEREF EK (176) - add new Productsdelete old ones\Add AER_AERO_250501_update1.sql";
+        var sqlFilePath = @"C:\FilePath\file.sql";
 
         var tables = new List<(string tableName, string columnNames)>
         {
@@ -23,7 +23,7 @@ class Program
     static void GenerateSQLFromCSV(string csvFilePath, string sqlFilePath, List<(string tableName, string columnNames)> tables)
     {
         var queries = new List<string>();
-        var airlineID = "157"; // Change to your AirlineID
+        var airlineID = "176"; // Change to your AirlineID
 
         // DELETE
         queries.Add("DECLARE @success bit = 1");
